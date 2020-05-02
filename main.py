@@ -62,6 +62,27 @@ day.grid(row=0,column=0,)
 day1 = Label(assignment_table, text="1", padx=32, pady=6, font=cell_font_2)
 day1.grid(row=1,column=0,)
 
+
+class ButtonTable:
+	def __init__(self, master, num_days, num_tasks):
+		self.num_days = num_days
+		self.num_tasks = num_tasks
+		self.cat_count = 0
+		self.buttons = list()
+
+		for i in range(num_days):
+			for j in range(num_tasks):
+				self.buttons.append(Button(master, text="Click Me!", command=self.clicker))
+				self.buttons[i*num_tasks+j].grid(row=i, column=j)
+
+	def clicker(self):
+		self.cat_count += 1
+		print(self.cat_count, " cats")
+
+
+s = ButtonTable(quota_table, 3, 3)
+
+
 # Creating label widget
 # myLabel1 = Label(root, text="Hello World!")
 # myLabel2 = Label(root, text="Goodbye World")
