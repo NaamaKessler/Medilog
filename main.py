@@ -1,5 +1,19 @@
 from medilog_objects import *
-import medilog_gui
+from medilog_gui import *
 
 
-roster = Roster('August2021')
+class Medilog:
+
+    def __init__(self):
+        self.year = None
+        self.month = None
+        self.app = QApplication([])
+        self.app_gui = AppWidget(self)
+
+        self.roster = None
+
+        self.app.exec_()
+
+
+medilog = Medilog()
+

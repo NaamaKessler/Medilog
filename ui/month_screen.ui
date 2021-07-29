@@ -50,7 +50,7 @@
     <attribute name="title">
      <string>Assignment table</string>
     </attribute>
-    <widget class="QDateEdit" name="dateEdit">
+    <widget class="QDateEdit" name="month_data">
      <property name="geometry">
       <rect>
        <x>10</x>
