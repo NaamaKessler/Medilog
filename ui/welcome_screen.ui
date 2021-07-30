@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1200</width>
-    <height>800</height>
+    <width>390</width>
+    <height>499</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,10 +16,10 @@
   <widget class="QWidget" name="background" native="true">
    <property name="geometry">
     <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>380</width>
-     <height>500</height>
+     <x>-1</x>
+     <y>-1</y>
+     <width>391</width>
+     <height>501</height>
     </rect>
    </property>
    <property name="styleSheet">
@@ -126,6 +126,7 @@ font: 75 15pt &quot;MS Sans Serif&quot;;</string>
    <zorder>week_btn</zorder>
    <zorder>label_2</zorder>
    <zorder>label</zorder>
+   <zorder>verticalSpacer</zorder>
   </widget>
  </widget>
  <resources>

@@ -3,7 +3,6 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QDialog, QApplication, QWidget, QStackedWidget, QComboBox
 import os
 from medilog_objects import Roster
-import numpy as np
 
 
 class AppWidget(QStackedWidget):
@@ -56,7 +55,6 @@ class MonthSchedule(QDialog):
         ui_path = os.path.dirname(os.getcwd()) + '\\' + 'ui'
         loadUi(ui_path + '\\' + 'month_screen.ui', self)
 
-        self.showMaximized()
         self.nColumns = 25
         self.nRows = 30
         self.assign_table.setColumnCount(self.nColumns)
