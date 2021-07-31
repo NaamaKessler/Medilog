@@ -36,8 +36,6 @@ class Roster:
         self.load_quotas()
         self.load_shifts()
 
-        print('meow')
-
     def load_physicians(self):
         self.seniors = []
         self.residents = []

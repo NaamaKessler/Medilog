@@ -29,7 +29,7 @@ class AppWidget(qtw.QStackedWidget):
         self.addWidget(self.welcome_window)
 
         self.roster_window = None
-
+        self.assignment_table = None
         self.show()
 
 
@@ -209,11 +209,88 @@ class TableTabWindow(qtw.QTabWidget):
         self.setStyleSheet(u"font: 10pt \"MS Shell Dlg 2\";")
 
         # add assignments table
-        self.assignment_table = qtw.QTableView(parent=self.assignment_tab)
-        self.assignment_table.setGeometry(5,
-                                          5,
-                                          self.medilog.app_gui.screen_width - 15,
-                                          self.medilog.app_gui.screen_height - 125)
+        self.medilog.app_gui.assignment_table = AssignmentTable(self.assignment_tab, self.medilog, self.color_palette)
+
+
+class AssignmentTable(qtw.QTableWidget):
+
+    def __init__(self, parent, medilog, color_palette):
+        super(AssignmentTable, self).__init__(parent)
+
+        self.medilog = medilog
+        self.color_palette = color_palette
+
+        self.setGeometry(5,
+                         5,
+                         self.medilog.app_gui.screen_width - 15,
+                         self.medilog.app_gui.screen_height - 125)
+
+        self.setStyleSheet('font: 75 4pt \"MS Sans Serif\";')
+
+        self.num_of_days = None
+        self.num_of_shifts = None
+
+        self.assign_combos = []
+
+    def update_table(self):
+        self.num_of_days = self.medilog.roster.number_of_days
+        self.num_of_shifts = len(self.medilog.roster.shifts)
+
+        # set table size
+        self.setRowCount(self.num_of_days)
+        self.setColumnCount(self.num_of_shifts)
+
+        shift_names = [shift.name for shift in self.medilog.roster.shifts]
+        self.setHorizontalHeaderLabels(shift_names)
+        [self.setColumnWidth(i, 65) for i in range(self.num_of_shifts)]
+        [self.setRowHeight(i, 5) for i in range(self.num_of_days)]
+
+        # populate table cells
+        for day in range(self.num_of_days):
+            for task_id in range(self.num_of_shifts):
+                combo = AssignCombo(self, day=day, task_id=task_id)
+                self.assign_combos.append(combo)
+                combo.popupAboutToBeShown.connect(self.populate_combo(day, task_id))
+
+                self.setCellWidget(day, task_id, combo)
+
+    def populate_combo(self, day, shift_id):
+        def aux_func():
+            if not self.assign_combos[index].count():
+                self.assign_combos[index].addItems(available_list)
+
+        index = self.num_of_shifts * day + shift_id
+        task = self.medilog.roster.shifts[shift_id]
+        available_list = self.get_available(day, task)
+
+        return aux_func
+
+    def get_available(self, day, shift):
+        available_list = []
+        if shift.senior:
+            for senior in self.medilog.roster.seniors:
+                if senior.is_available(self.medilog.roster, day, shift):
+                    available_list.append(senior.last)  ### change from .last to the actual object and handle consequences! ###
+
+        if shift.resident:
+            for resident in self.medilog.roster.residents:
+                if resident.is_available(self.medilog.roster, day, shift):
+                    available_list.append(resident.last)  ### change from .last to the actual object and handle consequences! ###
+
+        return available_list
+
+
+class AssignCombo(qtw.QComboBox):
+    popupAboutToBeShown = qtc.pyqtSignal()
+
+    def __init__(self, parent, day, task_id):
+        super().__init__(parent)
+        day = day
+        task_id = task_id
+
+    def showPopup(self):
+        self.popupAboutToBeShown.emit()
+        super(AssignCombo, self).showPopup()
 
 
 """ Auxiliary """
@@ -235,6 +312,8 @@ def create_roster(medilog, month: str, year: str):
 
     medilog.roster = Roster(month=month, year=str(year))
     medilog.roster.load_roster()
+
+    medilog.app_gui.assignment_table.update_table()
 
 
 """ Appearances """
