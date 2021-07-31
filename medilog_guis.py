@@ -1,9 +1,12 @@
 from PyQt5 import QtWidgets as qtw
 from PyQt5 import QtGui as qtg
 from PyQt5 import QtCore as qtc
-from dataclasses import dataclass
+
+import re
 
 from medilog_objects import *
+
+""" Widgets """
 
 
 class AppWidget(qtw.QStackedWidget):
@@ -16,10 +19,12 @@ class AppWidget(qtw.QStackedWidget):
         self.setWindowIcon(
             qtg.QIcon(r'C:/Users/rosengrp/OneDrive - weizmann.ac.il/Medilog Project/Medilog/Graphics/icon'))
 
+        # screen size
         screen_geometry = qtw.QApplication.desktop().screenGeometry()
         self.screen_width = screen_geometry.width()
         self.screen_height = screen_geometry.height()
 
+        # welcome window
         self.welcome_window = WelcomeWindow(self.medilog, self.color_palette)
         self.addWidget(self.welcome_window)
 
@@ -35,10 +40,10 @@ class WelcomeWindow(qtw.QDialog):
         self.medilog = medilog
         self.color_palette = color_palette
 
-        window_width = 340
-        window_height = 430
-        self.setFixedWidth(window_width)
-        self.setFixedHeight(window_height)
+        self.window_width = 340
+        self.window_height = 430
+        self.setFixedWidth(self.window_width)
+        self.setFixedHeight(self.window_height)
 
         self.setObjectName(u"welcome_window_dialog")
         self.setStyleSheet(
@@ -49,7 +54,7 @@ class WelcomeWindow(qtw.QDialog):
         # labels
         width = 280
         height = 40
-        x_position = int((window_width - width) / 2)
+        x_position = int((self.window_width - width) / 2)
         y_position = 50
         spacing = 120
 
@@ -65,7 +70,7 @@ class WelcomeWindow(qtw.QDialog):
         # buttons
         width = 260
         height = 40
-        x_position = int((window_width - width) / 2)
+        x_position = int((self.window_width - width) / 2)
         y_position = 230
         spacing = 55
 
@@ -91,14 +96,14 @@ class WelcomeWindow(qtw.QDialog):
         [element.raise_() for element in ui_elements]
 
         # connections
-        monthly_schedule_button.clicked.connect(self.go2month_schedule)
+        monthly_schedule_button.clicked.connect(self.go2roster_window)
 
-    def go2month_schedule(self):
-        month = 'January'
-        year = 2021
-        roster = Roster(month + str(year))
-        self.medilog.roster = roster
-        self.medilog.roster.load_roster()
+    def go2roster_window(self):
+        # month = 'January'
+        # year = 2021
+        # roster = Roster(month + str(year))
+        # self.medilog.roster = roster
+        # self.medilog.roster.load_roster()
 
         roster_window = RosterWindow(self.medilog, self.color_palette)
         self.medilog.app_gui.roster_window = roster_window
@@ -142,7 +147,10 @@ class RosterWindow(qtw.QMainWindow):
         pass
 
     def open_roster(self):
-        pass
+        dir_path = qtw.QFileDialog.getExistingDirectory(parent=self, caption='Choose directory')
+        dir_name = dir_path.split('/')[-1]
+        month, year, _ = re.split(r'(\d+)', dir_name)
+        create_roster(medilog=self.medilog, month=month, year=year)
 
     def save_roster(self):
         pass
@@ -150,13 +158,17 @@ class RosterWindow(qtw.QMainWindow):
     def export_roster(self):
         pass
 
+        # dock widgets
 
-        # dock widget
+        # justice_window = qtw.QDockWidget('Justice table')
         # justice_table = qtw.QWidget()
-        #
-        # right_dock_widget = qtw.QDockWidget('Push Helper')
-        # right_dock_widget.setWidget(justice_table)
-        # self.addDockWidget(qtc.Qt.RightDockWidgetArea, right_dock_widget)
+        # justice_window.setWidget(justice_table)
+        # self.addDockWidget(qtc.Qt.RightDockWidgetArea, justice_window)
+
+        # progress_summary_window = qtw.QDockWidget('Progress summary')
+        # progress_table = qtw.QWidget()
+        # progress_summary_window.setWidget(progress_table)
+        # self.addDockWidget(qtc.Qt.BottomDockWidgetArea, progress_summary_window)
 
 
 class TableTabWindow(qtw.QTabWidget):
@@ -204,10 +216,41 @@ class TableTabWindow(qtw.QTabWidget):
                                           self.medilog.app_gui.screen_height - 125)
 
 
+""" Auxiliary """
+
+
 def full_screen_window(window):
+    screen_width = window.medilog.app_gui.screen_width
+    screen_height = window.medilog.app_gui.screen_height
+
     window.medilog.app_gui.setWindowState(qtc.Qt.WindowMaximized)
-    window.setFixedWidth(window.medilog.app_gui.screen_width)
-    window.setFixedHeight(window.medilog.app_gui.screen_height - 65)
+    window.setFixedWidth(screen_width)
+    window.setFixedHeight(screen_height - 65)
+
+
+def create_roster(medilog, month: str, year: str):
+    if medilog.roster is not None:
+        print('Roster already exists.')
+        # add warning dialog
+
+    medilog.roster = Roster(month=month, year=str(year))
+    medilog.roster.load_roster()
+
+
+""" Appearances """
+
+
+class ColorPalette:
+
+    def __init__(self, index):
+        if index == 0:
+            self.color_list = [(10, 34, 57), (23, 96, 135), (29, 132, 181), (83, 162, 190), (19, 46, 50)]
+            self.label_color = (255, 255, 255)
+            self.button_color = (255, 255, 255)
+        elif index == 1:
+            self.color_list = [(60, 73, 63), (126, 141, 133), (179, 191, 184), (240, 247, 244), (99, 179, 112)]
+            self.label_color = (255, 255, 255)
+            self.button_color = (60, 60, 60)
 
 
 def set_label_style(label_object, palette, label_style):
@@ -229,15 +272,3 @@ def set_button_style(button_object, palette, button_style):
             palette.button_color) + ";"
                                     "font: 75 18pt \"MS Sans Serif\";")
 
-
-class ColorPalette:
-
-    def __init__(self, index):
-        if index == 0:
-            self.color_list = [(10, 34, 57), (23, 96, 135), (29, 132, 181), (83, 162, 190), (19, 46, 50)]
-            self.label_color = (255, 255, 255)
-            self.button_color = (255, 255, 255)
-        elif index == 1:
-            self.color_list = [(60, 73, 63), (126, 141, 133), (179, 191, 184), (240, 247, 244), (99, 179, 112)]
-            self.label_color = (255, 255, 255)
-            self.button_color = (60, 60, 60)
