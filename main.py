@@ -1,5 +1,5 @@
 from medilog_objects import *
-from medilog_guis import *
+from medilog_gui import *
 import sys
 
 
