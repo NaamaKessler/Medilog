@@ -30,7 +30,26 @@ class AppWidget(qtw.QStackedWidget):
 
         self.roster_window = None
         self.assignment_table = None
+        self.request_table = None
         self.show()
+
+    def popup_message(self, msg_title: str, msg_str: str, msg_symbol: str):
+        msg = qtw.QMessageBox()
+        msg.setWindowTitle(msg_title)
+        msg.setText(msg_str)
+
+        if msg_symbol == 'warning':
+            msg.setIcon(qtw.QMessageBox.Warning)
+        elif msg_symbol == 'critical':
+            msg.setIcon(qtw.QMessageBox.Critical)
+        elif msg_symbol == 'question':
+            msg.setIcon(qtw.QMessageBox.Question)
+        elif msg_symbol == 'information':
+            msg.setIcon(qtw.QMessageBox.Information)
+        else:
+            msg.setIcon(qtw.QMessageBox.Information)
+
+        aux = msg.exec_()
 
 
 class WelcomeWindow(qtw.QDialog):
@@ -38,7 +57,6 @@ class WelcomeWindow(qtw.QDialog):
     def __init__(self, medilog, color_palette):
         super(WelcomeWindow, self).__init__()
         self.medilog = medilog
-        self.color_palette = color_palette
 
         self.window_width = 340
         self.window_height = 430
@@ -64,8 +82,8 @@ class WelcomeWindow(qtw.QDialog):
         welcome_label.setGeometry(qtc.QRect(x_position, y_position, width, height))
         choose_action_label.setGeometry(qtc.QRect(x_position, y_position + spacing, width, height))
 
-        set_label_style(welcome_label, self.color_palette, 0)
-        set_label_style(choose_action_label, self.color_palette, 1)
+        set_label_style(welcome_label, color_palette, 0)
+        set_label_style(choose_action_label, color_palette, 1)
 
         # buttons
         width = 260
@@ -82,9 +100,9 @@ class WelcomeWindow(qtw.QDialog):
         weekly_schedule_button.setGeometry(qtc.QRect(x_position, y_position + spacing, width, height))
         statistics_button.setGeometry(qtc.QRect(x_position, y_position + 2 * spacing, width, height))
 
-        set_button_style(monthly_schedule_button, self.color_palette, 0)
-        set_button_style(weekly_schedule_button, self.color_palette, 0)
-        set_button_style(statistics_button, self.color_palette, 0)
+        set_button_style(monthly_schedule_button, color_palette, 0)
+        set_button_style(weekly_schedule_button, color_palette, 0)
+        set_button_style(statistics_button, color_palette, 0)
 
         # place elements
         ui_elements = [welcome_label,
@@ -99,13 +117,7 @@ class WelcomeWindow(qtw.QDialog):
         monthly_schedule_button.clicked.connect(self.go2roster_window)
 
     def go2roster_window(self):
-        # month = 'January'
-        # year = 2021
-        # roster = Roster(month + str(year))
-        # self.medilog.roster = roster
-        # self.medilog.roster.load_roster()
-
-        roster_window = RosterWindow(self.medilog, self.color_palette)
+        roster_window = RosterWindow(self.medilog)
         self.medilog.app_gui.roster_window = roster_window
         self.medilog.app_gui.addWidget(roster_window)
         self.medilog.app_gui.setCurrentIndex(self.medilog.app_gui.currentIndex() + 1)
@@ -113,10 +125,9 @@ class WelcomeWindow(qtw.QDialog):
 
 class RosterWindow(qtw.QMainWindow):
 
-    def __init__(self, medilog, color_palette):
+    def __init__(self, medilog):
         super(RosterWindow, self).__init__()
         self.medilog = medilog
-        self.color_palette = color_palette
 
         self.setObjectName('roster_main_window')
 
@@ -124,30 +135,50 @@ class RosterWindow(qtw.QMainWindow):
         full_screen_window(self)
 
         # # create the central widget of the main window: tab widget
-        self.tab_window = TableTabWindow(self.medilog, self.color_palette)
+        self.tab_window = TableTabWindow(self.medilog)
         self.setCentralWidget(self.tab_window)
 
         # set tabs backgrounds and fonts
         self.setStyleSheet(
             u"QWidget#roster_main_window{background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0,\n"
-            u" stop:0 rgba" + str(color_palette.color_list[0]) + ", stop:1 rgba"
-            + str(color_palette.color_list[1]) + ")};")
+            u" stop:0 rgba" + str(self.medilog.app_gui.color_palette.color_list[0]) + ", stop:1 rgba"
+            + str(self.medilog.app_gui.color_palette.color_list[1]) + ")};")
 
-        # menu
+        # menus
         self.menu_bar = self.menuBar()
+
+        # file menu
         self.file_menu = self.menu_bar.addMenu('File')
         self.new_action = self.file_menu.addAction('New', self.new_roster)
         self.open_action = self.file_menu.addAction('Open', self.open_roster)
         self.save_action = self.file_menu.addAction('Save', self.save_roster)
 
-        self.file_menu.addSeparator()
-        self.export_action = self.file_menu.addAction('Export', self.export_roster)
+        # export menu
+        self.export_menu = self.menu_bar.addMenu('Export')
+        self.create_requests_action = self.export_menu.addAction('Create requests files', self.create_requests)
+        self.export_menu.addSeparator()
+        self.export_action = self.export_menu.addAction('Publish', self.export_roster)
+
+        # dock widgets
+
+        # justice_window = qtw.QDockWidget('Justice table')
+        # justice_table = qtw.QTableWidget()
+        #
+        # justice_window.setWidget(justice_table)
+        # self.addDockWidget(qtc.Qt.RightDockWidgetArea, justice_window)
+        #
+        # progress_summary_window = qtw.QDockWidget('Progress summary')
+        # progress_table = qtw.QTableWidget()
+        # progress_summary_window.setWidget(progress_table)
+        # self.addDockWidget(qtc.Qt.BottomDockWidgetArea, progress_summary_window)
 
     def new_roster(self):
         pass
 
     def open_roster(self):
         dir_path = qtw.QFileDialog.getExistingDirectory(parent=self, caption='Choose directory')
+        if dir_path == '' or dir_path is None:
+            return
         dir_name = dir_path.split('/')[-1]
         month, year, _ = re.split(r'(\d+)', dir_name)
         create_roster(medilog=self.medilog, month=month, year=year)
@@ -158,25 +189,15 @@ class RosterWindow(qtw.QMainWindow):
     def export_roster(self):
         pass
 
-        # dock widgets
-
-        # justice_window = qtw.QDockWidget('Justice table')
-        # justice_table = qtw.QWidget()
-        # justice_window.setWidget(justice_table)
-        # self.addDockWidget(qtc.Qt.RightDockWidgetArea, justice_window)
-
-        # progress_summary_window = qtw.QDockWidget('Progress summary')
-        # progress_table = qtw.QWidget()
-        # progress_summary_window.setWidget(progress_table)
-        # self.addDockWidget(qtc.Qt.BottomDockWidgetArea, progress_summary_window)
+    def create_requests(self):
+        create_request_file(self.medilog)
 
 
 class TableTabWindow(qtw.QTabWidget):
 
-    def __init__(self, medilog, color_palette):
+    def __init__(self, medilog):
         super(TableTabWindow, self).__init__()
         self.medilog = medilog
-        self.color_palette = color_palette
 
         self.setObjectName('table_tab_window')
 
@@ -196,35 +217,33 @@ class TableTabWindow(qtw.QTabWidget):
         # set tabs style
         self.assignment_tab.setStyleSheet(
             u"QWidget#assignment_tab{background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1,\n"
-            u" stop:0 rgba" + str(color_palette.color_list[0]) + ", stop:1 rgba"
-            + str(color_palette.color_list[1]) + ")};")
+            u" stop:0 rgba" + str(self.medilog.app_gui.color_palette.color_list[0]) + ", stop:1 rgba"
+            + str(self.medilog.app_gui.color_palette.color_list[1]) + ")};")
         self.quota_tab.setStyleSheet(
             u"QWidget#quota_tab{background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1,\n"
-            u" stop:0 rgba" + str(color_palette.color_list[0]) + ", stop:1 rgba"
-            + str(color_palette.color_list[1]) + ")};")
+            u" stop:0 rgba" + str(self.medilog.app_gui.color_palette.color_list[0]) + ", stop:1 rgba"
+            + str(self.medilog.app_gui.color_palette.color_list[1]) + ")};")
         self.request_tab.setStyleSheet(
             u"QWidget#request_tab{background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1,\n"
-            u" stop:0 rgba" + str(color_palette.color_list[0]) + ", stop:1 rgba"
-            + str(color_palette.color_list[1]) + ")};")
+            u" stop:0 rgba" + str(self.medilog.app_gui.color_palette.color_list[0]) + ", stop:1 rgba"
+            + str(self.medilog.app_gui.color_palette.color_list[1]) + ")};")
         self.setStyleSheet(u"font: 10pt \"MS Shell Dlg 2\";")
 
-        # add assignments table
-        self.medilog.app_gui.assignment_table = AssignmentTable(self.assignment_tab, self.medilog, self.color_palette)
+        # add tables
+        self.medilog.app_gui.assignment_table = AssignmentTable(self.assignment_tab, self.medilog)
+        self.medilog.app_gui.quota_table = QuotaTable(self.quota_tab, self.medilog)
 
 
 class AssignmentTable(qtw.QTableWidget):
 
-    def __init__(self, parent, medilog, color_palette):
+    def __init__(self, parent, medilog):
         super(AssignmentTable, self).__init__(parent)
 
         self.medilog = medilog
-        self.color_palette = color_palette
 
-        self.setGeometry(5,
-                         5,
+        self.setGeometry(5, 5,
                          self.medilog.app_gui.screen_width - 15,
                          self.medilog.app_gui.screen_height - 125)
-
         self.setStyleSheet('font: 75 4pt \"MS Sans Serif\";')
 
         self.num_of_days = None
@@ -233,8 +252,8 @@ class AssignmentTable(qtw.QTableWidget):
         self.assign_combos = []
 
     def update_table(self):
-        self.num_of_days = self.medilog.roster.number_of_days
-        self.num_of_shifts = len(self.medilog.roster.shifts)
+        self.num_of_days = self.medilog.roster.num_of_days
+        self.num_of_shifts = self.medilog.roster.num_of_shifts
 
         # set table size
         self.setRowCount(self.num_of_days)
@@ -247,50 +266,91 @@ class AssignmentTable(qtw.QTableWidget):
 
         # populate table cells
         for day in range(self.num_of_days):
-            for task_id in range(self.num_of_shifts):
-                combo = AssignCombo(self, day=day, task_id=task_id)
+            for shift_id in range(self.num_of_shifts):
+                combo = AssignCombo(medilog=self.medilog, day=day, shift_id=shift_id)
                 self.assign_combos.append(combo)
-                combo.popupAboutToBeShown.connect(self.populate_combo(day, task_id))
 
-                self.setCellWidget(day, task_id, combo)
+                combo.popup_show_signal.connect(self.populate_combo)
+                combo.currentTextChanged.connect(combo.combo_changed)
+                combo.combo_set_signal.connect(self.update_combo)
 
+                self.setCellWidget(day, shift_id, combo)
+
+    @qtc.pyqtSlot(int, int)
     def populate_combo(self, day, shift_id):
-        def aux_func():
-            if not self.assign_combos[index].count():
-                self.assign_combos[index].addItems(available_list)
-
         index = self.num_of_shifts * day + shift_id
-        task = self.medilog.roster.shifts[shift_id]
-        available_list = self.get_available(day, task)
+        shift = self.medilog.roster.shifts[shift_id]
+        available_list = get_available(self.medilog, day, shift)
 
-        return aux_func
+        self.assign_combos[index].blockSignals(True)
+        current_text = self.assign_combos[index].currentText()
+        self.assign_combos[index].clear()
 
-    def get_available(self, day, shift):
-        available_list = []
-        if shift.senior:
-            for senior in self.medilog.roster.seniors:
-                if senior.is_available(self.medilog.roster, day, shift):
-                    available_list.append(senior.last)  ### change from .last to the actual object and handle consequences! ###
+        self.assign_combos[index].addItems(available_list)
 
-        if shift.resident:
-            for resident in self.medilog.roster.residents:
-                if resident.is_available(self.medilog.roster, day, shift):
-                    available_list.append(resident.last)  ### change from .last to the actual object and handle consequences! ###
+        # display previously assigned name
+        if current_text in available_list:
+            self.assign_combos[index].setCurrentText(current_text)
 
-        return available_list
+        self.assign_combos[index].blockSignals(False)
+
+    @qtc.pyqtSlot(int, int, str)
+    def update_combo(self, day, shift_id, physician):
+        update_assignment_table(self.medilog, day, shift_id, physician)
+
+
+class QuotaTable(qtw.QTableWidget):
+
+    def __init__(self, parent, medilog):
+        super(QuotaTable, self).__init__(parent)
+
+        self.medilog = medilog
+
+        self.setGeometry(5, 5,
+                         self.medilog.app_gui.screen_width - 15,
+                         self.medilog.app_gui.screen_height - 125)
+        self.setStyleSheet('font: 75 4pt \"MS Sans Serif\";')
+
+        self.num_of_physicians = None
+        self.num_of_shifts = None
+
+    def update_table(self):
+        self.num_of_physicians = self.medilog.roster.num_of_physicians
+        self.num_of_shifts = len(self.medilog.roster.shifts)
+
+        # set table size
+        self.setRowCount(self.num_of_physicians)
+        self.setColumnCount(self.num_of_shifts)
+
+        shift_names = [shift.name for shift in self.medilog.roster.shifts]
+        self.setHorizontalHeaderLabels(shift_names)
+        [self.setColumnWidth(i, 45) for i in range(self.num_of_shifts)]
+        [self.setRowHeight(i, 5) for i in range(self.num_of_physicians)]
 
 
 class AssignCombo(qtw.QComboBox):
-    popupAboutToBeShown = qtc.pyqtSignal()
+    popup_show_signal = qtc.pyqtSignal(int, int)
+    combo_set_signal = qtc.pyqtSignal(int, int, str)
 
-    def __init__(self, parent, day, task_id):
-        super().__init__(parent)
-        day = day
-        task_id = task_id
+    def __init__(self, medilog, day, shift_id):
+        super(AssignCombo, self).__init__()
+        self.medilog = medilog
+        self.day = day
+        self.shift_id = shift_id
+        self.displayed_text = ''
 
     def showPopup(self):
-        self.popupAboutToBeShown.emit()
+        self.popup_show_signal.emit(self.day, self.shift_id)
         super(AssignCombo, self).showPopup()
+
+    def combo_changed(self, text):
+        # print('displayed_text: ' + self.displayed_text)
+        # print('text: ' + text)
+        if self.displayed_text == text:
+            return
+        else:
+            self.combo_set_signal.emit(self.day, self.shift_id, text)
+            self.displayed_text = text
 
 
 """ Auxiliary """
@@ -308,12 +368,14 @@ def full_screen_window(window):
 def create_roster(medilog, month: str, year: str):
     if medilog.roster is not None:
         print('Roster already exists.')
+        return
         # add warning dialog
 
-    medilog.roster = Roster(month=month, year=str(year))
-    medilog.roster.load_roster()
+    medilog.roster = Roster()
+    medilog.roster.load_roster(month=month, year=str(year))
 
     medilog.app_gui.assignment_table.update_table()
+    medilog.app_gui.quota_table.update_table()
 
 
 """ Appearances """
@@ -323,13 +385,17 @@ class ColorPalette:
 
     def __init__(self, index):
         if index == 0:
-            self.color_list = [(10, 34, 57), (23, 96, 135), (29, 132, 181), (83, 162, 190), (19, 46, 50)]
+            self.color_list = [(31, 78, 120), (47, 117, 181), (112, 171, 229), (184, 214, 238), (41, 50, 65)]
             self.label_color = (255, 255, 255)
             self.button_color = (255, 255, 255)
         elif index == 1:
             self.color_list = [(60, 73, 63), (126, 141, 133), (179, 191, 184), (240, 247, 244), (99, 179, 112)]
             self.label_color = (255, 255, 255)
             self.button_color = (60, 60, 60)
+
+    @staticmethod
+    def rgb2hex(rgb_tuple):
+        return '#%02x%02x%02x' % rgb_tuple
 
 
 def set_label_style(label_object, palette, label_style):
