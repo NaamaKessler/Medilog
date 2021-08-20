@@ -13,7 +13,8 @@ class Roster:
 
     # days_list = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
-    def __init__(self):
+    def __init__(self, medilog):
+        self.medilog = medilog
 
         self.month = None
         self.month_full = None
@@ -70,14 +71,22 @@ class Roster:
         self.assign_table = AssignTable(assignments)
 
     def load_requests(self):
-        # seniors_requests = pd.read_excel('Requests - ' + 'Seniors - ' + self.month_full + str(self.year) + '.xlsx')
-        # residents_requests = pd.read_excel('Requests - ' + 'Residents - ' + self.month_full + str(self.year) + '.xlsx')
-        # self.request_table = RequestTable(seniors_requests, residents_requests)
+        seniors_requests = pd.read_excel('Requests - ' + 'Seniors - ' + self.month_full + str(self.year) + '.xlsx')
+        residents_requests = pd.read_excel('Requests - ' + 'Residents - ' + self.month_full + str(self.year) + '.xlsx')
+        self.request_table = RequestTable(seniors_requests, residents_requests)
         pass
 
     def load_quotas(self):
-        quotas = pd.read_csv('quotas.csv')
-        self.quota_table = QuotaTable(quotas)
+        quotas = pd.read_excel('quotas.xlsx')
+        physicians_list = quotas.iloc[:, 0].to_list()
+        existing_list = [senior.last for senior in self.seniors] + \
+                        [np.nan] + [resident.last for resident in self.residents]
+        if physicians_list != existing_list:
+            msg_str = 'Quotas table is incompatible with list of seniors or residents.'
+            self.medilog.app_gui.popup_message(msg_title='Warning', msg_str=msg_str, msg_symbol='warning')
+
+        quotas_data = (quotas.iloc[0:-1, 1:-1]).values.tolist()
+        self.quota_table = QuotaTable(quotas_data)
 
     def load_shifts(self):
         self.shifts = []
@@ -259,7 +268,8 @@ def create_request_file(medilog):
 
     try:
         for i, physicians in enumerate(['Seniors', 'Residents']):
-            wb = xlw.Workbook('Requests - ' + physicians + ' - ' + month + str(year) + '.xlsx', {'use_future_functions': True})
+            wb = xlw.Workbook('Requests - ' + physicians + ' - ' + month + str(year)
+                              + '.xlsx', {'use_future_functions': True})
             ws = wb.add_worksheet(name='Requests')
 
             # create header format
@@ -334,12 +344,11 @@ def create_request_file(medilog):
                     end_cell = current_column + str(4 + len(last_names))
                     range_str = start_cell + ':' + end_cell
                     formula = '=IFS(COUNTIF({}, 3) > 1, 3,' \
-                                   'COUNTIF({}, 4) > 2, 4,' \
-                                   'COUNTIF({}, 5) > 2, 5, TRUE, 0)'.format(range_str, range_str, range_str)
+                              'COUNTIF({}, 4) > 2, 4,' \
+                              'COUNTIF({}, 5) > 2, 5, TRUE, 0)'.format(range_str, range_str, range_str)
                     ws.write_formula(row=0, col=1 + k, formula=formula, cell_format=counter_format)
 
                     # add conditional formatting
-
                     error_cell = current_column + '1'
                     ws.conditional_format(error_cell, {'type': 'cell',
                                                        'criteria': '>',
@@ -359,16 +368,16 @@ def create_request_file(medilog):
             # error indication cell
             errors_range = column_string(2) + '1' + ':' + column_string(1 + medilog.roster.num_of_days) + '1'
             ws.write_formula('A2', '=IFS(COUNTIF({}, 3)>0, "Too many \'3\'s", '
-                                        'COUNTIF({}, 4)>0, "Too many \'4\'s", '
-                                        'COUNTIF({}, 5)>0, "Too many \'5\'s", '
-                                        'TRUE, 0)'.format(errors_range, errors_range, errors_range),
-                                        cell_format=counter_format)
+                                   'COUNTIF({}, 4)>0, "Too many \'4\'s", '
+                                   'COUNTIF({}, 5)>0, "Too many \'5\'s", '
+                                   'TRUE, 0)'.format(errors_range, errors_range, errors_range),
+                             cell_format=counter_format)
             ws.conditional_format('A2', {'type': 'cell',
                                          'criteria': 'not equal to',
                                          'value': 0,
                                          'format': error_indication_format})
 
-            # format table
+            """ Main table """
             even_format = wb.add_format()
             even_format.set_bg_color('#ffffff')
 
@@ -413,6 +422,67 @@ def create_request_file(medilog):
                 # hide grid lines
                 ws.hide_gridlines(2)
                 ws.hide_row_col_headers()
+
+            # add tooltip
+            options_1 = {'width': 140,
+                         'height': 22,
+                         'align': {'text': 'right'},
+                         'fill': {'color': hex_bg_colors[0]},
+                         'font': {'color': 'white', 'bold': True}}
+            options_2 = {'width': 140,
+                         'height': 22,
+                         'align': {'text': 'right'},
+                         'x_offset': -10,
+                         'fill': {'color': hex_bg_colors[1]},
+                         'font': {'color': 'white', 'bold': True}}
+            options_3 = {'width': 140,
+                         'height': 22,
+                         'align': {'text': 'right'},
+                         'y_offset': 2,
+                         'fill': {'color': hex_bg_colors[1]},
+                         'font': {'color': 'white', 'bold': True}}
+            options_4 = {'width': 140,
+                         'height': 22,
+                         'align': {'text': 'right'},
+                         'y_offset': 2,
+                         'x_offset': -10,
+                         'fill': {'color': hex_bg_colors[0]},
+                         'font': {'color': 'white', 'bold': True}}
+            options_5 = {'width': 140,
+                         'height': 22,
+                         'align': {'text': 'right'},
+                         'y_offset': 4,
+                         'fill': {'color': hex_bg_colors[0]},
+                         'font': {'color': 'white', 'bold': True}}
+            options_6 = {'width': 140,
+                         'height': 22,
+                         'align': {'text': 'right'},
+                         'y_offset': 4,
+                         'x_offset': -10,
+                         'fill': {'color': hex_bg_colors[1]},
+                         'font': {'color': 'white', 'bold': True}}
+
+            if i == 0:
+                text_1 = ' לא פעיל - 1'
+                text_2 = ' לא בכלל - 2'
+                text_3 = ' כן תורנות - 3'
+                text_4 = ' כן כוננות פעילה - 4'
+                text_5 = ' כן חצי תורנות - 5'
+                text_6 = ''
+
+                ws.insert_textbox(0, 36, text_1, options_1)
+                ws.insert_textbox(0, 34, text_2, options_2)
+                ws.insert_textbox(1, 36, text_3, options_3)
+                ws.insert_textbox(1, 34, text_4, options_4)
+                ws.insert_textbox(2, 36, text_5, options_5)
+                ws.insert_textbox(2, 34, text_6, options_6)
+
+            else:
+                text_1 = ' לא תורנות - 1'
+                text_3 = ' כן תורנות - 3'
+
+                ws.insert_textbox(0, 34, text_1, options_1)
+                ws.insert_textbox(1, 34, text_3, options_3)
 
             # lock worksheet
             ws.protect(options={'select_locked_cells': False})
