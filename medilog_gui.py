@@ -131,6 +131,7 @@ class RosterWindow(qtw.QMainWindow):
     def __init__(self, medilog):
         super(RosterWindow, self).__init__()
         self.medilog = medilog
+        self.unsaved_flag = False
 
         self.setObjectName('roster_main_window')
 
@@ -154,7 +155,7 @@ class RosterWindow(qtw.QMainWindow):
         self.file_menu = self.menu_bar.addMenu('File')
         self.new_action = self.file_menu.addAction('New', self.new_roster)
         self.open_action = self.file_menu.addAction('Open', self.open_roster)
-        self.save_action = self.file_menu.addAction('Save', self.save_roster)
+        self.save_action = self.file_menu.addAction('Save', self.save_roster_popup)
 
         # export menu
         self.export_menu = self.menu_bar.addMenu('Export')
@@ -186,8 +187,23 @@ class RosterWindow(qtw.QMainWindow):
         month, year, _ = re.split(r'(\d+)', dir_name)
         create_roster(medilog=self.medilog, month=month, year=year)
 
-    def save_roster(self):
-        pass
+    def save_roster_popup(self):
+        self.save_roster(manual=True)
+
+    def save_roster(self, manual=False):
+        try:
+            self.medilog.roster.save_tables()
+        except IOError:
+            self.medilog.app_gui.popup_message(msg_title='Warning',
+                                               msg_str='Close all Excel files to save changes.',
+                                               msg_symbol='warning')
+            return
+
+        self.medilog.app_gui.roster_window.unsaved_flag = False
+        if manual:
+            self.medilog.app_gui.popup_message(msg_title='Success',
+                                               msg_str='Roster successfully saved.',
+                                               msg_symbol='information')
 
     def export_roster(self):
         pass
@@ -235,6 +251,13 @@ class TableTabWindow(qtw.QTabWidget):
         # add tables
         self.medilog.app_gui.assignment_table = AssignmentTable(self.assignment_tab, self.medilog)
         self.medilog.app_gui.quota_data = QuotaTable(self.quota_tab, self.medilog)
+
+        self.currentChanged.connect(self.switch_tab)
+
+    def switch_tab(self):
+        if self.medilog.app_gui.roster_window.unsaved_flag:
+            self.medilog.app_gui.roster_window.save_roster()
+            # implement some indication.
 
 
 """ Assignment Table"""
@@ -303,6 +326,7 @@ class AssignmentTable(qtw.QTableWidget):
     @qtc.pyqtSlot(int, int, str)
     def update_combo(self, day, shift_id, physician):
         update_assignment_table(self.medilog, day, shift_id, physician)
+        self.medilog.app_gui.roster_window.unsaved_flag = True
 
 
 class AssignCombo(qtw.QComboBox):
@@ -321,8 +345,6 @@ class AssignCombo(qtw.QComboBox):
         super(AssignCombo, self).showPopup()
 
     def combo_changed(self, text):
-        # print('displayed_text: ' + self.displayed_text)
-        # print('text: ' + text)
         if self.displayed_text == text:
             return
         else:
@@ -359,7 +381,7 @@ class QuotaTable(qtw.QTableView):
         physician_names = senior_names + [''] + resident_names
 
         # set model class
-        self.model = QuotaTableModel(self.medilog.roster.quota_table.quotas)
+        self.model = QuotaTableModel(self.medilog.roster.quota_table.quotas_data)
         self.model.medilog = self.medilog
         self.model.header_labels = shift_names
         self.model.name_labels = physician_names
@@ -391,7 +413,7 @@ class QuotaTable(qtw.QTableView):
             self.setRowHeight(row, 10)
 
         # set header class
-        self.header = Header(self)
+        self.header = QuotaHeader(self)
         self.header.setSectionResizeMode(self.header.Stretch)
         self.setHorizontalHeader(self.header)
 
@@ -399,12 +421,14 @@ class QuotaTable(qtw.QTableView):
         self.model.dataChanged.connect(self.update_quota_data)
 
     def update_quota_data(self, index):
-        self.medilog.roster.quota_table.quotas[index.row()][index.column()] = index.data()
+        # consider implementing a setter for the tables.
+        self.medilog.roster.quota_table.quotas_data[index.row()][index.column()] = int(index.data())
+        self.medilog.app_gui.roster_window.unsaved_flag = True
 
 
-class Header(qtw.QHeaderView):
+class QuotaHeader(qtw.QHeaderView):
     def __init__(self, parent=None):
-        super(Header, self).__init__(qtc.Qt.Horizontal, parent)
+        super(QuotaHeader, self).__init__(qtc.Qt.Horizontal, parent)
 
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.ctxMenu)
@@ -468,6 +492,187 @@ class QuotaTableModel(qtc.QAbstractTableModel):
         return len(self._data[0])
 
     def setData(self, index, value, role):
+        if isinstance(value, str):
+            if value == '':
+                value = 0
+            else:
+                try:
+                    value = int(value)
+                except ValueError:
+                    self.medilog.app_gui.popup_message(msg_title='Warning',
+                                                       msg_str='Invalid value.',
+                                                       msg_symbol='warning')
+                    value = 0
+
+        if role == qtc.Qt.EditRole:
+            self._data[index.row()][index.column()] = value
+            self.dataChanged.emit(index, index)
+            return True
+        return False
+
+    def flags(self, index):
+        return qtc.Qt.ItemIsSelectable | qtc.Qt.ItemIsEnabled | qtc.Qt.ItemIsEditable
+
+    def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
+        if role == qtc.Qt.DisplayRole and orientation == qtc.Qt.Horizontal:
+            return self.header_labels[section]
+        elif role == qtc.Qt.DisplayRole and orientation == qtc.Qt.Vertical:
+            return self.name_labels[section]
+        return qtc.QAbstractTableModel.headerData(self, section, orientation, role)
+
+
+""" Request Table """
+
+
+class RequestTable(qtw.QTableView):
+
+    def __init__(self, parent, medilog):
+        super(RequestTable, self).__init__(parent)
+
+        self.medilog = medilog
+        self.setGeometry(5, 5,
+                         self.medilog.app_gui.screen_width - 15,
+                         self.medilog.app_gui.screen_height - 125)
+        self.setStyleSheet('font: 75 4pt \"MS Sans Serif\";')
+
+        self.num_of_physicians = None
+        self.num_of_days = None
+        self.model = None
+        self.header = None
+
+    def update_table(self):
+        self.num_of_physicians = self.medilog.roster.num_of_physicians
+        self.num_of_days = self.medilog.roster.num_of_days
+
+        day_names = [shift.name for shift in self.medilog.roster.shifts]
+        senior_names = [senior.last for senior in self.medilog.roster.seniors]
+        resident_names = [resident.last for resident in self.medilog.roster.residents]
+        physician_names = senior_names + [''] + resident_names
+
+        # set model class
+        self.model = QuotaTableModel(self.medilog.roster.quota_table.quotas_data)
+        self.model.medilog = self.medilog
+        self.model.header_labels = day_names
+        self.model.name_labels = physician_names
+        self.model.break_point = len(senior_names)
+        self.setModel(self.model)
+
+        # prettify table
+        rgb2hex = lambda color: self.medilog.app_gui.color_palette.rgb2hex(color)
+        color_list = self.medilog.app_gui.color_palette.color_list
+        self.setAlternatingRowColors(True)
+        self.setStyleSheet('QTableView{'
+                           'alternate-background-color: %s;'
+                           'gridline-color: rgb(0, 0, 0);'
+                           'selection-background-color: %s;}'
+                           'QHeaderView::section{'
+                           'background-color: %s;'
+                           'color: #FFFFFF;'
+                           'font-weight:bold;'
+                           'font-size: 10pt;}'
+                           'QTableView QTableCornerButton::section{'
+                           'background-color: %s;}'
+                           % (rgb2hex(color_list[3]), rgb2hex(color_list[-1]),
+                              rgb2hex(color_list[0]), rgb2hex(color_list[0])))
+
+        for col in range(self.model.columnCount(0)):
+            self.setColumnWidth(col, 55)
+
+        for row in range(self.model.rowCount(0)):
+            self.setRowHeight(row, 10)
+
+        # set header class
+        self.header = QuotaHeader(self)
+        self.header.setSectionResizeMode(self.header.Stretch)
+        self.setHorizontalHeader(self.header)
+
+        # self.selectionModel().selectionChanged.connect(self.toggle_selection)
+        self.model.dataChanged.connect(self.update_quota_data)
+
+    def update_quota_data(self, index):
+        # consider implementing a setter for the tables.
+        self.medilog.roster.quota_table.quotas_data[index.row()][index.column()] = int(index.data())
+        self.medilog.app_gui.roster_window.unsaved_flag = True
+
+
+class RequestHeader(qtw.QHeaderView):
+    def __init__(self, parent=None):
+        super(QuotaHeader, self).__init__(qtc.Qt.Horizontal, parent)
+
+        self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.ctxMenu)
+        self.hello = qtw.QAction("Hello", self)
+        self.hello.triggered.connect(self.printHello)
+        self.currentSection = None
+
+    def printHello(self):
+        data = self.model().headerData(self.currentSection, qtc.Qt.Horizontal)
+        print(data.toString())
+
+    def ctxMenu(self, point):
+        menu = qtw.QMenu(self)
+        self.currentSection = self.logicalIndexAt(point)
+        menu.addAction(self.hello)
+        menu.exec_(self.mapToGlobal(point))
+
+
+class RequestTableModel(qtc.QAbstractTableModel):
+
+    def __init__(self, data):
+        super().__init__()
+        self._data = data
+        self.medilog = None
+        self.header_labels = None
+        self.name_labels = None
+        self.break_point = None
+
+    def data(self, index, role):
+        if role == qtc.Qt.TextAlignmentRole:
+            return qtc.Qt.AlignCenter
+
+        if role == qtc.Qt.BackgroundRole:
+            if index.row() == self.break_point:
+                return qtg.QColor(*self.medilog.app_gui.color_palette.color_list[-1])
+
+            # return qtg.QColor(qtc.Qt.white)
+
+        if role == qtc.Qt.DisplayRole:
+            # Get the raw value
+            value = self._data[index.row()][index.column()]
+            # Perform per-type checks and render accordingly.
+            if index.row() == self.break_point:
+                return ''
+            if isinstance(value, int):
+                # Render float to 2 dp
+                return str(value)
+            if isinstance(value, str):
+                # Render strings with quotes
+                return '%s' % value
+            # Default (anything not captured above: e.g. int)
+            return value
+
+    def rowCount(self, index):
+        # The length of the outer list.
+        return len(self._data)
+
+    def columnCount(self, index):
+        # The following takes the first sub-list, and returns
+        # the length (only works if all rows are an equal length)
+        return len(self._data[0])
+
+    def setData(self, index, value, role):
+        if isinstance(value, str):
+            if value == '':
+                value = 0
+            else:
+                try:
+                    value = int(value)
+                except ValueError:
+                    self.medilog.app_gui.popup_message(msg_title='Warning',
+                                                       msg_str='Invalid value.',
+                                                       msg_symbol='warning')
+                    value = 0
+
         if role == qtc.Qt.EditRole:
             self._data[index.row()][index.column()] = value
             self.dataChanged.emit(index, index)
@@ -504,7 +709,11 @@ def create_roster(medilog, month: str, year: str):
         # add warning dialog
 
     medilog.roster = Roster(medilog)
-    medilog.roster.load_roster(month=month, year=str(year))
+    fail_flag = medilog.roster.load_roster(month=month, year=str(year))
+    if fail_flag:
+        medilog.roster = None
+        os.chdir(medilog.base_path)
+        return
 
     medilog.app_gui.assignment_table.update_table()
     medilog.app_gui.quota_data.update_table()

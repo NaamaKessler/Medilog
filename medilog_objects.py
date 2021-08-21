@@ -45,16 +45,26 @@ class Roster:
         self.path = os.getcwd() + '\\' + self.month + self.year  # fix to account for changing the roster
         os.chdir(self.path)
 
-        self.load_physicians()
-        self.load_assignments()
-        self.load_requests()
-        self.load_quotas()
-        self.load_shifts()
+        fail_flag = False
+        try:
+            self.load_physicians()
+            self.load_assignments()
+            self.load_requests()
+            self.load_quotas()
+            self.load_shifts()
+        except IOError:
+            self.medilog.app_gui.popup_message(msg_title='Warning',
+                                               msg_str='Close all Excel files.',
+                                               msg_symbol='warning')
+            fail_flag = True
+            return fail_flag
 
         self.first_day_of_month, self.num_of_days = calendar.monthrange(year=int(year),
                                                                         month=self.month_dict_abbr[self.month])
         self.num_of_physicians = len(self.seniors) + len(self.residents)
         self.num_of_shifts = len(self.shifts)
+
+        return fail_flag
 
     def load_physicians(self):
         self.seniors = []
@@ -77,29 +87,23 @@ class Roster:
         pass
 
     def load_quotas(self):
-        quotas = pd.read_excel('quotas.xlsx')
-        physicians_list = quotas.iloc[:, 0].to_list()
+        quota_pd = pd.read_excel('quotas.xlsx')
+        physicians_list = quota_pd.iloc[:, 0].to_list()
         existing_list = [senior.last for senior in self.seniors] + \
                         [np.nan] + [resident.last for resident in self.residents]
         if physicians_list != existing_list:
             msg_str = 'Quotas table is incompatible with list of seniors or residents.'
             self.medilog.app_gui.popup_message(msg_title='Warning', msg_str=msg_str, msg_symbol='warning')
 
-        quotas_data = (quotas.iloc[0:-1, 1:-1]).values.tolist()
+        quotas_data = (quota_pd.iloc[:, 1:]).values.tolist()
         self.quota_table = QuotaTable(quotas_data)
 
     def load_shifts(self):
         self.shifts = []
-        shift_table = pd.read_csv('shifts.csv')
-        for i, shift_name in enumerate(shift_table.iloc[:, 0].values.tolist()):
-            self.shifts.append(Shift(name=shift_name,
-                                     id=i,
-                                     senior=shift_table.iloc[i, 1],
-                                     resident=shift_table.iloc[i, 2],
-                                     active=shift_table.iloc[i, 3],
-                                     passive=shift_table.iloc[i, 4],
-                                     duty=shift_table.iloc[i, 5],
-                                     on_call=shift_table.iloc[i, 6]))
+        shift_pd = pd.read_excel('shifts.xlsx')
+        for i in range(len(shift_pd.index)):
+            curr_attr = shift_pd.iloc[i, :].to_dict()
+            self.shifts.append(Shift(i, **curr_attr))
 
     def validate_input(self):
         if self.month not in self.month_dict_abbr and self.month not in self.month_dict:
@@ -107,12 +111,26 @@ class Roster:
         if str(self.year)[0] != str(2) or str(self.year)[1] != str(0) or len(str(self.year)) > 4:
             raise Exception('Invalid year input.')
 
+    def save_tables(self):
+
+        # Quota table
+        phys_list = [senior.last for senior in self.seniors] + \
+                         [np.nan] + \
+                         [resident.last for resident in self.residents]
+        for i, name in enumerate(phys_list):
+            if pd.isnull(name):
+                phys_list[i] = ''
+
+        data = [[phys_list[i]] + self.quota_table.quotas_data[i][:] for i in range(len(phys_list))]
+        columns = ['name'] + [shift.name for shift in self.shifts]
+        quota_df = pd.DataFrame(data, columns=columns)
+        quota_df.to_excel('quotas.xlsx', index=False)
+
 
 class AssignTable:
 
     def __init__(self, assignments):
         self.assignments = assignments
-        pass
 
 
 class RequestTable:
@@ -120,20 +138,12 @@ class RequestTable:
     def __init__(self, senior_requests, residents_requests):
         self.seniors_requests = senior_requests
         self.residents_requests = residents_requests
-        pass
 
 
 class QuotaTable:
 
-    def __init__(self, quotas):
-        self.quotas = quotas
-        pass
-
-
-class Assignment:
-
-    def __init__(self):
-        pass
+    def __init__(self, quotas_data):
+        self.quotas_data = quotas_data
 
 
 @dataclass
@@ -161,7 +171,7 @@ class Physician:
 
     def assignment_collision(self, roster, day, shift):
         current_day = roster.assign_table.assignments.iloc[day].tolist()
-        current_day.pop(shift.id)
+        current_day.pop(shift.index)
         if self in current_day:
             return True
 
@@ -183,19 +193,13 @@ class Resident(Physician):
     pass
 
 
-@dataclass
 class Shift:
-    name: str
-    id: int
 
-    senior: bool
-    resident: bool
-
-    active: bool
-    passive: bool
-
-    duty: bool
-    on_call: bool
+    def __init__(self, index, **kwargs):
+        self.attributes_dict = kwargs
+        self.index = index
+        for attr in self.attributes_dict:
+            setattr(self, attr.lower(), self.attributes_dict[attr])
 
 
 """ Auxiliary functions"""
@@ -255,7 +259,9 @@ def physician_by_name(medilog, name):
 
 def create_request_file(medilog):
     if medilog.roster is None:
-        medilog.app_gui.popup_message(msg_title='Warning', msg_str='No month was chosen.', msg_symbol='warning')
+        medilog.app_gui.popup_message(msg_title='Warning',
+                                      msg_str='No month was chosen.',
+                                      msg_symbol='warning')
         return
 
     month = medilog.roster.month_full
@@ -503,3 +509,4 @@ def column_string(n):
         n, remainder = divmod(n - 1, 26)
         string = chr(65 + remainder) + string
     return string
+
