@@ -30,6 +30,7 @@ class AppWidget(qtw.QStackedWidget):
 
         self.roster_window = None
         self.assignment_table = None
+        self.quota_table = None
         self.request_table = None
         self.show()
 
@@ -250,7 +251,8 @@ class TableTabWindow(qtw.QTabWidget):
 
         # add tables
         self.medilog.app_gui.assignment_table = AssignmentTable(self.assignment_tab, self.medilog)
-        self.medilog.app_gui.quota_data = QuotaTable(self.quota_tab, self.medilog)
+        self.medilog.app_gui.quota_table = QuotaTable(self.quota_tab, self.medilog)
+        self.medilog.app_gui.request_table = RequestTable(self.request_tab, self.medilog)
 
         self.currentChanged.connect(self.switch_tab)
 
@@ -544,15 +546,15 @@ class RequestTable(qtw.QTableView):
         self.num_of_physicians = self.medilog.roster.num_of_physicians
         self.num_of_days = self.medilog.roster.num_of_days
 
-        day_names = [shift.name for shift in self.medilog.roster.shifts]
+        weekday_names = weekday_lister(self.medilog.roster)
         senior_names = [senior.last for senior in self.medilog.roster.seniors]
         resident_names = [resident.last for resident in self.medilog.roster.residents]
         physician_names = senior_names + [''] + resident_names
 
         # set model class
-        self.model = QuotaTableModel(self.medilog.roster.quota_table.quotas_data)
+        self.model = RequestTableModel(self.medilog.roster.request_table.requests_data)
         self.model.medilog = self.medilog
-        self.model.header_labels = day_names
+        self.model.header_labels = weekday_names
         self.model.name_labels = physician_names
         self.model.break_point = len(senior_names)
         self.setModel(self.model)
@@ -582,22 +584,19 @@ class RequestTable(qtw.QTableView):
             self.setRowHeight(row, 10)
 
         # set header class
-        self.header = QuotaHeader(self)
+        self.header = RequestHeader(self)
         self.header.setSectionResizeMode(self.header.Stretch)
         self.setHorizontalHeader(self.header)
 
-        # self.selectionModel().selectionChanged.connect(self.toggle_selection)
-        self.model.dataChanged.connect(self.update_quota_data)
-
-    def update_quota_data(self, index):
+    def update_request_data(self, index):
         # consider implementing a setter for the tables.
-        self.medilog.roster.quota_table.quotas_data[index.row()][index.column()] = int(index.data())
+        self.medilog.roster.request_table.requests_data[index.row()][index.column()] = int(index.data())
         self.medilog.app_gui.roster_window.unsaved_flag = True
 
 
 class RequestHeader(qtw.QHeaderView):
     def __init__(self, parent=None):
-        super(QuotaHeader, self).__init__(qtc.Qt.Horizontal, parent)
+        super(RequestHeader, self).__init__(qtc.Qt.Horizontal, parent)
 
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.ctxMenu)
@@ -716,7 +715,8 @@ def create_roster(medilog, month: str, year: str):
         return
 
     medilog.app_gui.assignment_table.update_table()
-    medilog.app_gui.quota_data.update_table()
+    medilog.app_gui.quota_table.update_table()
+    medilog.app_gui.request_table.update_table()
 
 
 """ Appearances """

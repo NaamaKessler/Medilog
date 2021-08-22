@@ -81,21 +81,45 @@ class Roster:
         self.assign_table = AssignTable(assignments)
 
     def load_requests(self):
-        seniors_requests = pd.read_excel('Requests - ' + 'Seniors - ' + self.month_full + str(self.year) + '.xlsx')
-        residents_requests = pd.read_excel('Requests - ' + 'Residents - ' + self.month_full + str(self.year) + '.xlsx')
-        self.request_table = RequestTable(seniors_requests, residents_requests)
-        pass
+        # read files
+        seniors_path = 'Requests - ' + 'Seniors - ' + self.month_full + str(self.year) + '.xlsx'
+        residents_path = 'Requests - ' + 'Residents - ' + self.month_full + str(self.year) + '.xlsx'
+        seniors_requests_pd = pd.read_excel(seniors_path,
+                                            skiprows=[0, 1, 2],
+                                            convert_float=True)
+        residents_requests_pd = pd.read_excel(residents_path,
+                                              skiprows=[0, 1, 2],
+                                              convert_float=True)
+
+        # validate list of physicians' names
+        seniors_list = seniors_requests_pd.iloc[:, 0].to_list()
+        residents_list = residents_requests_pd.iloc[:, 0].to_list()
+        if seniors_list != [senior.last for senior in self.seniors]:
+            msg_str = 'Seniors requests table is incompatible with list of seniors.'
+            self.medilog.app_gui.popup_message(msg_title='Warning', msg_str=msg_str, msg_symbol='warning')
+        if residents_list != [resident.last for resident in self.residents]:
+            msg_str = 'Residents requests table is incompatible with list of residents.'
+            self.medilog.app_gui.popup_message(msg_title='Warning', msg_str=msg_str, msg_symbol='warning')
+
+        # extract actual tabular data
+        seniors_requests_data = seniors_requests_pd.iloc[:, 1:].fillna('').values.tolist()
+        residents_requests_data = residents_requests_pd.iloc[:, 1:].fillna('').values.tolist()
+        self.request_table = RequestTable(seniors_requests_data, residents_requests_data)
 
     def load_quotas(self):
-        quota_pd = pd.read_excel('quotas.xlsx')
-        physicians_list = quota_pd.iloc[:, 0].to_list()
+        # read file
+        quotas_pd = pd.read_excel('quotas.xlsx')
+
+        # validate list of physicians' names
+        physicians_list = quotas_pd.iloc[:, 0].to_list()
         existing_list = [senior.last for senior in self.seniors] + \
                         [np.nan] + [resident.last for resident in self.residents]
         if physicians_list != existing_list:
             msg_str = 'Quotas table is incompatible with list of seniors or residents.'
             self.medilog.app_gui.popup_message(msg_title='Warning', msg_str=msg_str, msg_symbol='warning')
 
-        quotas_data = (quota_pd.iloc[:, 1:]).values.tolist()
+        # extract actual tabular data
+        quotas_data = (quotas_pd.iloc[:, 1:]).values.tolist()
         self.quota_table = QuotaTable(quotas_data)
 
     def load_shifts(self):
@@ -135,9 +159,11 @@ class AssignTable:
 
 class RequestTable:
 
-    def __init__(self, senior_requests, residents_requests):
-        self.seniors_requests = senior_requests
-        self.residents_requests = residents_requests
+    def __init__(self, senior_requests_data, residents_requests_data):
+
+        self.requests_data = senior_requests_data + \
+                             [['' for _ in range(len(senior_requests_data[0]))]] + \
+                             residents_requests_data
 
 
 class QuotaTable:
@@ -254,6 +280,14 @@ def physician_by_name(medilog, name):
     return physician
 
 
+def weekday_lister(roster):
+    weekday_list = []
+    for k in range(roster.num_of_days):
+        weekday_list.append(str(roster.days_list[(roster.first_day_of_month + k) % 7]))
+
+    return weekday_list
+
+
 """ Excel interface """
 
 
@@ -342,6 +376,7 @@ def create_request_file(medilog):
 
             # add dates and days
             ws.set_column(1, medilog.roster.num_of_days, width=5)
+            weekday_list = weekday_lister(medilog.roster)
             for k in range(medilog.roster.num_of_days):
                 # add restriction for seniors requests only
                 if i == 0:
@@ -365,11 +400,11 @@ def create_request_file(medilog):
                 ws.write(1, 1 + k, '', extra_format)
 
                 # add day of week
-                curr_day = str(medilog.roster.days_list[(first_day_of_month + k) % 7])
+                curr_day = weekday_list[k]
                 ws.write(2, 1 + k, curr_day, day_format)
 
                 # add day of month
-                ws.write(3, 1 + k, k, date_format)
+                ws.write(3, 1 + k, k + 1, date_format)
 
             # error indication cell
             errors_range = column_string(2) + '1' + ':' + column_string(1 + medilog.roster.num_of_days) + '1'
@@ -499,7 +534,8 @@ def create_request_file(medilog):
         medilog.app_gui.popup_message(msg_title='Warning', msg_str='Close requests files.', msg_symbol='warning')
         return
 
-    medilog.app_gui.popup_message(msg_title='Success', msg_str='Requests files created successfully.',
+    medilog.app_gui.popup_message(msg_title='Success',
+                                  msg_str='Requests files created successfully.',
                                   msg_symbol='information')
 
 
